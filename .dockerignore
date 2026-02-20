@@ -1,0 +1,24 @@
+node_modules
+dist
+coverage
+.git
+.github
+.claude
+docs
+k8s
+terraform
+*.md
+.env
+.env.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Test files (not needed in production image)
+**/*.spec.ts
+**/*.test.ts
+test/
+
+# TypeScript source (compiled to dist/ in builder stage)
+# Note: DO NOT exclude generated/ — Prisma client must be included

@@ -1,0 +1,29 @@
+# =============================================================================
+# terraform.tfvars.example
+# Copy to terraform.tfvars and fill in actual values.
+# DO NOT commit terraform.tfvars to version control (it's in .gitignore).
+# =============================================================================
+
+aws_region   = "us-east-1"
+environment  = "production"
+project_name = "refacil-wallet"
+
+# Network
+vpc_cidr = "10.0.0.0/16"
+
+# EKS
+eks_cluster_version     = "1.29"
+eks_node_instance_types = ["t3.medium"]
+eks_min_size            = 2
+eks_max_size            = 10
+eks_desired_size        = 3
+
+# RDS — required, no defaults
+db_name     = "wallet"
+db_username = "walletadmin"
+# db_password is managed by AWS Secrets Manager (see rds.tf)
+
+# RDS sizing
+rds_instance_class        = "db.t3.medium"
+rds_allocated_storage     = 20
+rds_max_allocated_storage = 100

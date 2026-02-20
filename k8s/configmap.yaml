@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: refacil-wallet-config
+  namespace: refacil-wallet
+  labels:
+    app: refacil-wallet
+data:
+  NODE_ENV: "production"
+  PORT: "3000"
+  LOG_LEVEL: "info"
+  FRAUD_VELOCITY_WINDOW_MINUTES: "5"
+  FRAUD_VELOCITY_MAX_TRANSACTIONS: "10"
+  FRAUD_AMOUNT_THRESHOLD: "10000"

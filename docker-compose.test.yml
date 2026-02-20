@@ -1,0 +1,33 @@
+# Used by CI pipelines to run the test suite in an isolated environment.
+# docker compose -f docker-compose.test.yml up --abort-on-container-exit
+services:
+  app:
+    build:
+      context: .
+      target: builder   # Builder stage includes dev deps needed to run Jest
+    command: npm run test:cov
+    environment:
+      DATABASE_URL: postgresql://wallet:wallet@postgres:5432/wallet_test
+      NODE_ENV: test
+      PORT: "3000"
+      LOG_LEVEL: error
+      FRAUD_VELOCITY_WINDOW_MINUTES: "5"
+      FRAUD_VELOCITY_MAX_TRANSACTIONS: "10"
+      FRAUD_AMOUNT_THRESHOLD: "10000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: wallet_test
+      POSTGRES_USER: wallet
+      POSTGRES_PASSWORD: wallet
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wallet -d wallet_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    # No named volume — ephemeral data for each test run

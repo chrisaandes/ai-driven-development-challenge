@@ -1,0 +1,9 @@
+export { DomainError } from './domain-error';
+export { InsufficientBalanceError } from './insufficient-balance.error';
+export { InvalidAmountError } from './invalid-amount.error';
+export { WalletNotFoundError } from './wallet-not-found.error';
+export { WalletAlreadyExistsError } from './wallet-already-exists.error';
+export { TransactionNotFoundError } from './transaction-not-found.error';
+export { AlertNotFoundError } from './alert-not-found.error';
+export { AlertAlreadyResolvedError } from './alert-already-resolved.error';
+export { DuplicateTransactionError } from './duplicate-transaction.error';

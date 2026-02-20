@@ -1,0 +1,70 @@
+# Default-deny all ingress and egress; then explicitly allow required traffic.
+# This implements the principle of least privilege at the network level.
+---
+# 1. Default deny all ingress to the wallet pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: refacil-wallet
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+---
+# 2. Allow ingress from nginx ingress controller only
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-controller
+  namespace: refacil-wallet
+spec:
+  podSelector:
+    matchLabels:
+      app: refacil-wallet
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 3000
+---
+# 3. Allow egress to PostgreSQL on port 5432 only
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-postgres
+  namespace: refacil-wallet
+spec:
+  podSelector:
+    matchLabels:
+      app: refacil-wallet
+  policyTypes:
+  - Egress
+  egress:
+  - ports:
+    - protocol: TCP
+      port: 5432
+---
+# 4. Allow egress to DNS (kube-dns) for service discovery
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-dns
+  namespace: refacil-wallet
+spec:
+  podSelector:
+    matchLabels:
+      app: refacil-wallet
+  policyTypes:
+  - Egress
+  egress:
+  - ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53

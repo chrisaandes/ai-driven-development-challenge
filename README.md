@@ -2,10 +2,10 @@
 
 Microservicio de billetera digital para procesamiento de transacciones financieras.
 
-[![CI](https://github.com/username/refacil-wallet/actions/workflows/ci.yml/badge.svg)](https://github.com/username/refacil-wallet/actions)
-[![Coverage](https://img.shields.io/badge/coverage-87%25-green)](./docs/testing/coverage-report.md)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
-[![NestJS](https://img.shields.io/badge/NestJS-10-red)](https://nestjs.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
+[![NestJS](https://img.shields.io/badge/NestJS-11-red)](https://nestjs.com/)
+[![Tests](https://img.shields.io/badge/tests-274%20passing-brightgreen)]()
+[![Prisma](https://img.shields.io/badge/Prisma-7.4-2D3748)](https://www.prisma.io/)
 
 ---
 
@@ -17,16 +17,18 @@ Este proyecto fue construido utilizando **AI-Driven Development** con Claude Cod
 - **Parallel Agent Execution**: Múltiples agentes trabajando simultáneamente
 - **Clean Architecture**: Separación estricta de capas con dependency inversion
 
-📖 [Ver documentación completa del proceso AI](./docs/ai-development/PLAYBOOK.md)
+📖 [Ver documentación completa del proceso AI](./docs/AI_DRIVEN_PROCESS.md)
 
-### Métricas del Desarrollo
+### Metricas del Desarrollo
 
-| Métrica | Valor |
+| Metrica | Valor |
 |---------|-------|
-| Tiempo Total | ~7 horas |
-| Speedup vs Secuencial | 2.8x |
-| Sesiones de Agentes | 18 |
-| Cobertura de Tests | 87% |
+| Lineas de codigo fuente | 4,368 |
+| Lineas de tests | 3,482 |
+| Tests unitarios | 274 (21 suites) |
+| Sesiones de agentes | 12 (3 teams) |
+| Archivos generados | 90 TypeScript |
+| Commits | 10 |
 
 ---
 
@@ -42,7 +44,7 @@ Este proyecto fue construido utilizando **AI-Driven Development** con Claude Cod
 
 ```bash
 # Clonar repositorio
-git clone https://github.com/username/refacil-wallet.git
+git clone https://github.com/chrisaandes/ai-driven-development-challenge.git
 cd refacil-wallet
 
 # Instalar dependencias
@@ -83,8 +85,10 @@ Swagger UI: `http://localhost:3000/api/docs`
 | `GET` | `/api/v1/transactions?user_id={id}` | Obtener historial de transacciones |
 | `GET` | `/api/v1/wallets/{userId}/balance` | Consultar saldo actual |
 | `GET` | `/api/v1/fraud/alerts` | Listar alertas de fraude |
+| `GET` | `/api/v1/fraud/alerts/{userId}` | Alertas por usuario |
 | `PUT` | `/api/v1/fraud/alerts/{id}/resolve` | Resolver alerta |
-| `GET` | `/health` | Health check |
+| `GET` | `/health` | Liveness probe |
+| `GET` | `/health/ready` | Readiness probe |
 
 ### Ejemplo: Procesar Depósito
 
@@ -157,15 +161,15 @@ npm run test:integration
 npm run test:e2e
 ```
 
-### Cobertura por Capa
+### Tests por Capa
 
-| Capa | Cobertura |
-|------|-----------|
-| Domain | 98% |
-| Application | 91% |
-| Infrastructure | 82% |
-| Presentation | 84% |
-| **Total** | **87%** |
+| Capa | Tests | Suites |
+|------|-------|--------|
+| Domain | 145 | 6 |
+| Application | 35 | 7 |
+| Infrastructure | 29 | 3 |
+| Presentation | 64 | 4 |
+| **Total** | **274** | **21** |
 
 ---
 

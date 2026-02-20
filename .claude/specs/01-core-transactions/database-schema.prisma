@@ -1,0 +1,237 @@
+// =============================================================================
+// Refacil Wallet - Database Schema (Prisma)
+// =============================================================================
+//
+// This schema defines the persistence layer for the Refacil Wallet microservice.
+//
+// Key Design Decisions:
+//   - Money is stored as Decimal(15, 2) in the database. The application layer
+//     converts to/from integer cents using the Money value object.
+//   - All primary keys are UUID v4, stored as @db.Uuid.
+//   - Database columns use snake_case via @map() / @@map().
+//   - Prisma model fields use camelCase (TypeScript convention).
+//   - Concurrency control uses pessimistic locking (SELECT ... FOR UPDATE)
+//     via Prisma $queryRaw, with a version field as an optimistic locking fallback.
+//   - The transaction ID is the client-provided idempotency key (UNIQUE constraint).
+//   - Foreign key relations use onDelete: Restrict to prevent cascade deletion
+//     of financial records.
+//   - Audit logs are immutable (no updatedAt field).
+//
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// Wallet Model
+// =============================================================================
+//
+// Represents a user's digital wallet. Each user has exactly one wallet.
+// The balance field stores the current available balance as Decimal(15,2).
+// The version field supports optimistic locking as a fallback concurrency
+// control mechanism (primary strategy is pessimistic locking via
+// SELECT ... FOR UPDATE).
+//
+model Wallet {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
+  balance   Decimal  @default(0) @db.Decimal(15, 2)
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // A wallet has many transactions
+  transactions Transaction[]
+
+  @@map("wallets")
+}
+
+// =============================================================================
+// TransactionType Enum
+// =============================================================================
+//
+// Defines the allowed transaction types. DEPOSIT adds funds to the wallet,
+// WITHDRAW removes funds from the wallet.
+//
+enum TransactionType {
+  DEPOSIT
+  WITHDRAW
+}
+
+// =============================================================================
+// Transaction Model
+// =============================================================================
+//
+// Represents a financial transaction (deposit or withdrawal) against a wallet.
+// The id field is the client-provided idempotency key (UUID v4), ensuring
+// exactly-once processing. If a client retries with the same transaction ID,
+// the existing transaction is returned instead of creating a duplicate.
+//
+// The userId is denormalized from the wallet for faster query performance
+// on transaction history and fraud velocity checks.
+//
+// The balanceAfter field captures the wallet balance immediately after this
+// transaction was applied, providing a complete audit trail of balance changes.
+//
+model Transaction {
+  id           String          @id @db.Uuid
+  walletId     String          @map("wallet_id") @db.Uuid
+  userId       String          @map("user_id") @db.Uuid
+  type         TransactionType
+  amount       Decimal         @db.Decimal(15, 2)
+  balanceAfter Decimal         @map("balance_after") @db.Decimal(15, 2)
+  createdAt    DateTime        @default(now()) @map("created_at")
+
+  // Belongs to a wallet; restrict deletion to prevent orphaned financial records
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Restrict)
+
+  // A transaction may trigger one or more fraud alerts
+  fraudAlerts FraudAlert[]
+
+  // Composite index for transaction history queries and fraud velocity checks.
+  // Supports: GET /api/v1/transactions?user_id=... (ordered by createdAt DESC)
+  // and fraud velocity window COUNT queries within a time range per user.
+  @@index([userId, createdAt(sort: Desc)], map: "idx_transactions_user_created")
+
+  // Index for looking up all transactions belonging to a specific wallet.
+  @@index([walletId], map: "idx_transactions_wallet")
+
+  @@map("transactions")
+}
+
+// =============================================================================
+// FraudAlertType Enum
+// =============================================================================
+//
+// Categorizes the type of fraud detection rule that triggered the alert.
+// HIGH_AMOUNT: the transaction amount exceeds the configured threshold.
+// VELOCITY: the user exceeded the maximum number of transactions within
+//           the configured time window.
+//
+enum FraudAlertType {
+  HIGH_AMOUNT
+  VELOCITY
+}
+
+// =============================================================================
+// FraudSeverity Enum
+// =============================================================================
+//
+// Indicates the severity level of a fraud alert. Severity is determined by
+// the fraud detection rules based on how far the transaction deviates from
+// normal thresholds.
+//
+// HIGH_AMOUNT severity mapping:
+//   LOW:      amount > threshold AND amount < 2x threshold
+//   MEDIUM:   amount >= 2x threshold AND amount < 5x threshold
+//   HIGH:     amount >= 5x threshold
+//
+// VELOCITY severity mapping:
+//   MEDIUM:   transactions > max
+//   HIGH:     transactions > 2x max
+//   CRITICAL: transactions > 5x max
+//
+enum FraudSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// =============================================================================
+// FraudAlert Model
+// =============================================================================
+//
+// Represents a fraud detection alert generated when a transaction triggers
+// one or more fraud detection rules. Alerts are created asynchronously after
+// the transaction is processed (the transaction still completes).
+//
+// The details field (JSONB) stores flexible metadata specific to each alert
+// type, such as the threshold value, the actual transaction amount, the
+// number of transactions in the velocity window, etc.
+//
+// The userId is denormalized from the transaction for faster queries when
+// listing alerts by user.
+//
+model FraudAlert {
+  id              String         @id @default(uuid()) @db.Uuid
+  transactionId   String         @map("transaction_id") @db.Uuid
+  userId          String         @map("user_id") @db.Uuid
+  alertType       FraudAlertType @map("alert_type")
+  severity        FraudSeverity
+  details         Json           @default("{}") @db.JsonB
+  resolved        Boolean        @default(false)
+  resolvedAt      DateTime?      @map("resolved_at")
+  resolutionNotes String?        @map("resolution_notes")
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  // Belongs to the transaction that triggered this alert;
+  // restrict deletion to preserve the fraud audit trail.
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+
+  // Index for querying alerts by user, ordered by most recent first.
+  // Supports: GET /api/v1/fraud/alerts/:userId
+  @@index([userId, createdAt(sort: Desc)], map: "idx_fraud_alerts_user_created")
+
+  // Index for listing unresolved alerts, ordered by most recent first.
+  // Supports: GET /api/v1/fraud/alerts?resolved=false
+  @@index([resolved, createdAt(sort: Desc)], map: "idx_fraud_alerts_resolved_created")
+
+  @@map("fraud_alerts")
+}
+
+// =============================================================================
+// AuditLog Model
+// =============================================================================
+//
+// Provides an immutable audit trail for all significant state changes in the
+// system. Audit log entries are append-only and must never be updated or
+// deleted (enforced at the database level via triggers in production).
+//
+// Each entry records the "5 W's":
+//   - Who:    userId
+//   - What:   action + entityType + entityId + details
+//   - When:   createdAt
+//   - Where:  correlationId (traces back to the originating HTTP request)
+//   - Result: captured in the details JSON
+//
+// Supported actions:
+//   TRANSACTION_CREATED, BALANCE_UPDATED, FRAUD_ALERT_CREATED, ALERT_RESOLVED
+//
+// Supported entity types:
+//   WALLET, TRANSACTION, FRAUD_ALERT
+//
+// Note: This model intentionally has NO updatedAt field. Audit logs are
+// immutable; once written, they must not be modified.
+//
+model AuditLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  action        String
+  entityType    String   @map("entity_type")
+  entityId      String   @map("entity_id") @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  details       Json     @default("{}") @db.JsonB
+  correlationId String   @map("correlation_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Index for looking up all audit entries related to a specific entity.
+  // Supports queries like: "Show me all changes to wallet X" or
+  // "Show me the history of transaction Y".
+  @@index([entityType, entityId], map: "idx_audit_logs_entity")
+
+  // Index for looking up all activity by a specific user, ordered by
+  // most recent first. Supports user activity audit queries.
+  @@index([userId, createdAt(sort: Desc)], map: "idx_audit_logs_user_created")
+
+  // Index for tracing all operations that occurred as part of a single
+  // HTTP request. Supports end-to-end request debugging.
+  @@index([correlationId], map: "idx_audit_logs_correlation")
+
+  @@map("audit_logs")
+}

@@ -3,6 +3,8 @@ import { InsufficientBalanceError } from '../../domain/errors/insufficient-balan
 import { WalletNotFoundError } from '../../domain/errors/wallet-not-found.error';
 import { DuplicateTransactionError } from '../../domain/errors/duplicate-transaction.error';
 import { InvalidAmountError } from '../../domain/errors/invalid-amount.error';
+import { AlertNotFoundError } from '../../domain/errors/alert-not-found.error';
+import { AlertAlreadyResolvedError } from '../../domain/errors/alert-already-resolved.error';
 
 /**
  * HTTP status codes mapped from domain error codes.
@@ -12,6 +14,8 @@ const ERROR_STATUS_MAP: Record<string, number> = {
   WALLET_NOT_FOUND: 404,
   DUPLICATE_TRANSACTION: 409,
   INVALID_AMOUNT: 400,
+  ALERT_NOT_FOUND: 404,
+  ALERT_ALREADY_RESOLVED: 422,
 };
 
 /**
@@ -66,6 +70,12 @@ export class ApplicationException extends Error {
     }
     if (error instanceof InvalidAmountError) {
       return { reason: error.reason };
+    }
+    if (error instanceof AlertNotFoundError) {
+      return { alertId: error.alertId };
+    }
+    if (error instanceof AlertAlreadyResolvedError) {
+      return { alertId: error.alertId };
     }
     return undefined;
   }

@@ -1,7 +1,9 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { IWalletRepository } from '../../domain/interfaces/wallet-repository.interface';
 import type { ITransactionRepository } from '../../domain/interfaces/transaction-repository.interface';
+import type { IFraudAlertRepository } from '../../domain/interfaces/fraud-alert-repository.interface';
+import { FraudDetectionService } from '../../domain/services/fraud-detection.service';
 import { Wallet } from '../../domain/entities/wallet.entity';
 import { Money } from '../../domain/value-objects/money.vo';
 import { INJECTION_TOKENS } from '../../domain/interfaces/injection-tokens';
@@ -22,15 +24,22 @@ import {
  *
  * Auto-creates a wallet for the user if one does not yet exist.
  *
- * After successful persistence, publishes domain events via EventEmitter2.
+ * After successful persistence, publishes domain events via EventEmitter2 and runs
+ * fraud detection asynchronously. Fraud detection failures do NOT fail the transaction.
  */
 @Injectable()
 export class ProcessTransactionUseCase {
+  private readonly logger = new Logger(ProcessTransactionUseCase.name);
+
   constructor(
     @Inject(INJECTION_TOKENS.WALLET_REPOSITORY)
     private readonly walletRepository: IWalletRepository,
     @Inject(INJECTION_TOKENS.TRANSACTION_REPOSITORY)
     private readonly transactionRepository: ITransactionRepository,
+    @Inject(INJECTION_TOKENS.FRAUD_DETECTION_SERVICE)
+    private readonly fraudDetectionService: FraudDetectionService,
+    @Inject(INJECTION_TOKENS.FRAUD_ALERT_REPOSITORY)
+    private readonly fraudAlertRepository: IFraudAlertRepository,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -98,7 +107,31 @@ export class ProcessTransactionUseCase {
       this.eventEmitter.emit(event.eventName, event);
     }
 
-    // 6. Return output DTO
+    // 6. Run fraud detection (non-blocking: errors must not fail the transaction)
+    try {
+      const recentTransactions = await this.transactionRepository.findByUserId(
+        input.userId,
+      );
+      const fraudResult = this.fraudDetectionService.analyze(
+        transaction,
+        // Exclude the current transaction from history (it was just saved and is already counted)
+        recentTransactions.filter((t) => t.id !== transaction.id),
+      );
+
+      if (fraudResult.hasAlerts()) {
+        for (const alert of fraudResult.alerts) {
+          await this.fraudAlertRepository.save(alert);
+          this.eventEmitter.emit('fraud.alert.created', alert);
+        }
+      }
+    } catch (err) {
+      this.logger.error(
+        `Fraud detection failed for transaction ${transaction.id}: ${(err as Error).message}`,
+        (err as Error).stack,
+      );
+    }
+
+    // 7. Return output DTO
     return {
       transactionId: transaction.id,
       type: transaction.type.value,

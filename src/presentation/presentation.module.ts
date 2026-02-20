@@ -5,6 +5,7 @@ import { InfrastructureModule } from '../infrastructure/infrastructure.module';
 import { TransactionController } from './controllers/transaction.controller';
 import { WalletController } from './controllers/wallet.controller';
 import { HealthController } from './controllers/health.controller';
+import { FraudController } from './controllers/fraud.controller';
 import { GlobalExceptionFilter } from './filters/http-exception.filter';
 
 /**
@@ -16,7 +17,7 @@ import { GlobalExceptionFilter } from './filters/http-exception.filter';
  */
 @Module({
   imports: [ApplicationModule, InfrastructureModule],
-  controllers: [TransactionController, WalletController, HealthController],
+  controllers: [TransactionController, WalletController, HealthController, FraudController],
   providers: [
     {
       provide: APP_FILTER,

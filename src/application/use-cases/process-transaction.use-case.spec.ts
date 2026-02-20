@@ -2,6 +2,12 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ProcessTransactionUseCase } from './process-transaction.use-case';
 import { IWalletRepository } from '../../domain/interfaces/wallet-repository.interface';
 import { ITransactionRepository } from '../../domain/interfaces/transaction-repository.interface';
+import { IFraudAlertRepository } from '../../domain/interfaces/fraud-alert-repository.interface';
+import {
+  FraudDetectionService,
+  FraudAnalysisResult,
+} from '../../domain/services/fraud-detection.service';
+import { FraudAlert } from '../../domain/entities/fraud-alert.entity';
 import { Wallet } from '../../domain/entities/wallet.entity';
 import { Transaction } from '../../domain/entities/transaction.entity';
 import { Money } from '../../domain/value-objects/money.vo';
@@ -12,6 +18,8 @@ describe('ProcessTransactionUseCase', () => {
   let useCase: ProcessTransactionUseCase;
   let walletRepository: jest.Mocked<IWalletRepository>;
   let transactionRepository: jest.Mocked<ITransactionRepository>;
+  let fraudDetectionService: jest.Mocked<FraudDetectionService>;
+  let fraudAlertRepository: jest.Mocked<IFraudAlertRepository>;
   let eventEmitter: jest.Mocked<EventEmitter2>;
 
   const baseInput = {
@@ -31,9 +39,20 @@ describe('ProcessTransactionUseCase', () => {
 
     transactionRepository = {
       save: jest.fn().mockResolvedValue(undefined),
-      findByUserId: jest.fn(),
+      findByUserId: jest.fn().mockResolvedValue([]),
       findByIdempotencyKey: jest.fn(),
       countByUserIdInWindow: jest.fn(),
+    };
+
+    fraudDetectionService = {
+      analyze: jest.fn().mockReturnValue(new FraudAnalysisResult([])),
+    } as unknown as jest.Mocked<FraudDetectionService>;
+
+    fraudAlertRepository = {
+      save: jest.fn().mockResolvedValue(undefined),
+      findAll: jest.fn(),
+      findByUserId: jest.fn(),
+      findById: jest.fn(),
     };
 
     eventEmitter = {
@@ -43,6 +62,8 @@ describe('ProcessTransactionUseCase', () => {
     useCase = new ProcessTransactionUseCase(
       walletRepository,
       transactionRepository,
+      fraudDetectionService,
+      fraudAlertRepository,
       eventEmitter,
     );
   });
@@ -154,6 +175,90 @@ describe('ProcessTransactionUseCase', () => {
         expect((err as ApplicationException).statusCode).toBe(422);
         expect((err as ApplicationException).code).toBe('INSUFFICIENT_BALANCE');
       }
+    });
+  });
+
+  describe('fraud detection integration', () => {
+    it('runs fraud analysis after successful transaction', async () => {
+      walletRepository.findByUserId.mockResolvedValue(null);
+      transactionRepository.findByIdempotencyKey.mockResolvedValue(null);
+      transactionRepository.findByUserId.mockResolvedValue([]);
+
+      await useCase.execute(baseInput);
+
+      expect(fraudDetectionService.analyze).toHaveBeenCalled();
+    });
+
+    it('saves fraud alerts when fraud is detected', async () => {
+      walletRepository.findByUserId.mockResolvedValue(null);
+      transactionRepository.findByIdempotencyKey.mockResolvedValue(null);
+      transactionRepository.findByUserId.mockResolvedValue([]);
+
+      const fraudAlert = FraudAlert.reconstitute({
+        id: crypto.randomUUID(),
+        transactionId: baseInput.transactionId,
+        userId: baseInput.userId,
+        alertType: 'HIGH_AMOUNT',
+        severity: 'MEDIUM',
+        details: { amount: 100, threshold: 10000 },
+        resolved: false,
+        resolvedAt: null,
+        resolutionNotes: null,
+        createdAt: new Date(),
+      });
+      fraudDetectionService.analyze.mockReturnValue(
+        new FraudAnalysisResult([fraudAlert]),
+      );
+
+      await useCase.execute(baseInput);
+
+      expect(fraudAlertRepository.save).toHaveBeenCalledWith(fraudAlert);
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'fraud.alert.created',
+        fraudAlert,
+      );
+    });
+
+    it('does not save alerts when no fraud is detected', async () => {
+      walletRepository.findByUserId.mockResolvedValue(null);
+      transactionRepository.findByIdempotencyKey.mockResolvedValue(null);
+      transactionRepository.findByUserId.mockResolvedValue([]);
+      fraudDetectionService.analyze.mockReturnValue(new FraudAnalysisResult([]));
+
+      await useCase.execute(baseInput);
+
+      expect(fraudAlertRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('does not fail the transaction when fraud detection throws', async () => {
+      walletRepository.findByUserId.mockResolvedValue(null);
+      transactionRepository.findByIdempotencyKey.mockResolvedValue(null);
+      transactionRepository.findByUserId.mockRejectedValue(
+        new Error('DB connection error'),
+      );
+
+      // Transaction should still succeed even though fraud detection failed
+      const result = await useCase.execute(baseInput);
+
+      expect(result.isNew).toBe(true);
+      expect(result.balanceAfter).toBe(100);
+    });
+
+    it('does not run fraud detection for idempotent replays', async () => {
+      const existingTx = Transaction.reconstitute({
+        id: baseInput.transactionId,
+        walletId: 'wallet-1',
+        userId: baseInput.userId,
+        type: TransactionType.DEPOSIT,
+        amount: Money.of(100),
+        balanceAfter: Money.of(100),
+        createdAt: new Date('2026-01-01T10:00:00Z'),
+      });
+      transactionRepository.findByIdempotencyKey.mockResolvedValue(existingTx);
+
+      await useCase.execute(baseInput);
+
+      expect(fraudDetectionService.analyze).not.toHaveBeenCalled();
     });
   });
 

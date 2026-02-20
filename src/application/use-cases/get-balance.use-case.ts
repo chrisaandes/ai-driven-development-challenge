@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { IWalletRepository } from '../../domain/interfaces/wallet-repository.interface';
+import type { IWalletRepository } from '../../domain/interfaces/wallet-repository.interface';
 import { WalletNotFoundError } from '../../domain/errors/wallet-not-found.error';
 import { INJECTION_TOKENS } from '../../domain/interfaces/injection-tokens';
 import { ApplicationException } from '../exceptions/application.exception';

@@ -1,7 +1,7 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { IWalletRepository } from '../../domain/interfaces/wallet-repository.interface';
-import { ITransactionRepository } from '../../domain/interfaces/transaction-repository.interface';
+import type { IWalletRepository } from '../../domain/interfaces/wallet-repository.interface';
+import type { ITransactionRepository } from '../../domain/interfaces/transaction-repository.interface';
 import { Wallet } from '../../domain/entities/wallet.entity';
 import { Money } from '../../domain/value-objects/money.vo';
 import { INJECTION_TOKENS } from '../../domain/interfaces/injection-tokens';

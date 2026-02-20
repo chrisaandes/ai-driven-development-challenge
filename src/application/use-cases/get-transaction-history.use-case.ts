@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { ITransactionRepository } from '../../domain/interfaces/transaction-repository.interface';
+import type { ITransactionRepository } from '../../domain/interfaces/transaction-repository.interface';
 import { INJECTION_TOKENS } from '../../domain/interfaces/injection-tokens';
 import {
   GetTransactionHistoryInput,

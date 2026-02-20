@@ -17,7 +17,7 @@ Este proyecto fue construido utilizando **AI-Driven Development** con Claude Cod
 - **Parallel Agent Execution**: Múltiples agentes trabajando simultáneamente
 - **Clean Architecture**: Separación estricta de capas con dependency inversion
 
-📖 [Ver documentación completa del proceso AI](./docs/ai-development/PLAYBOOK.md.md)
+📖 [Ver documentación completa del proceso AI](./docs/ai-development/PLAYBOOK.md)
 
 ### Métricas del Desarrollo
 

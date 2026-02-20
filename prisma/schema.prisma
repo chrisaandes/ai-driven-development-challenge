@@ -1,0 +1,130 @@
+// =============================================================================
+// Refacil Wallet - Database Schema (Prisma)
+// =============================================================================
+//
+// Key Design Decisions:
+//   - Money is stored as Decimal(15, 2) in the database. The application layer
+//     converts to/from integer cents using the Money value object.
+//   - All primary keys are UUID v4, stored as @db.Uuid.
+//   - Database columns use snake_case via @map() / @@map().
+//   - Prisma model fields use camelCase (TypeScript convention).
+//   - Concurrency control uses pessimistic locking (SELECT ... FOR UPDATE)
+//     via Prisma $queryRaw, with a version field as an optimistic locking fallback.
+//   - The transaction ID is the client-provided idempotency key (UNIQUE constraint).
+//   - Foreign key relations use onDelete: Restrict to prevent cascade deletion
+//     of financial records.
+//   - Audit logs are immutable (no updatedAt field).
+//
+// =============================================================================
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// =============================================================================
+// Wallet Model
+// =============================================================================
+model Wallet {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
+  balance   Decimal  @default(0) @db.Decimal(15, 2)
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  transactions Transaction[]
+
+  @@map("wallets")
+}
+
+// =============================================================================
+// TransactionType Enum
+// =============================================================================
+enum TransactionType {
+  DEPOSIT
+  WITHDRAW
+}
+
+// =============================================================================
+// Transaction Model
+// =============================================================================
+model Transaction {
+  id           String          @id @db.Uuid
+  walletId     String          @map("wallet_id") @db.Uuid
+  userId       String          @map("user_id") @db.Uuid
+  type         TransactionType
+  amount       Decimal         @db.Decimal(15, 2)
+  balanceAfter Decimal         @map("balance_after") @db.Decimal(15, 2)
+  createdAt    DateTime        @default(now()) @map("created_at")
+
+  wallet      Wallet       @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  fraudAlerts FraudAlert[]
+
+  @@index([userId, createdAt(sort: Desc)], map: "idx_transactions_user_created")
+  @@index([walletId], map: "idx_transactions_wallet")
+  @@map("transactions")
+}
+
+// =============================================================================
+// FraudAlertType Enum
+// =============================================================================
+enum FraudAlertType {
+  HIGH_AMOUNT
+  VELOCITY
+}
+
+// =============================================================================
+// FraudSeverity Enum
+// =============================================================================
+enum FraudSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// =============================================================================
+// FraudAlert Model
+// =============================================================================
+model FraudAlert {
+  id              String         @id @default(uuid()) @db.Uuid
+  transactionId   String         @map("transaction_id") @db.Uuid
+  userId          String         @map("user_id") @db.Uuid
+  alertType       FraudAlertType @map("alert_type")
+  severity        FraudSeverity
+  details         Json           @default("{}") @db.JsonB
+  resolved        Boolean        @default(false)
+  resolvedAt      DateTime?      @map("resolved_at")
+  resolutionNotes String?        @map("resolution_notes")
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt(sort: Desc)], map: "idx_fraud_alerts_user_created")
+  @@index([resolved, createdAt(sort: Desc)], map: "idx_fraud_alerts_resolved_created")
+  @@map("fraud_alerts")
+}
+
+// =============================================================================
+// AuditLog Model
+// =============================================================================
+model AuditLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  action        String
+  entityType    String   @map("entity_type")
+  entityId      String   @map("entity_id") @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  details       Json     @default("{}") @db.JsonB
+  correlationId String   @map("correlation_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId], map: "idx_audit_logs_entity")
+  @@index([userId, createdAt(sort: Desc)], map: "idx_audit_logs_user_created")
+  @@index([correlationId], map: "idx_audit_logs_correlation")
+  @@map("audit_logs")
+}

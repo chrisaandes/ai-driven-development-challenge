@@ -47,3 +47,5 @@ temp/
 
 # Claude Code teams (local only)
 .claude/teams/
+
+/generated/prisma
